@@ -7,6 +7,7 @@
 
 package beginnerplayer;
 import battlecode.common.*;
+import examplefuncsplayer.Triplet;
 
 import java.util.*;
 
@@ -121,6 +122,8 @@ public strictfp class RobotPlayer {
         MapLocation deposit = null;
         HashSet<MapLocation> emptySoupSquares = new HashSet<>();
         HashSet<MapLocation> soupySquares = new HashSet<>();
+
+        int passiveMovementDirection = rc.getID() % 8;
 
         boolean messageIsPending = false;
         int[] pendingMessage = new int[0];
@@ -300,8 +303,15 @@ public strictfp class RobotPlayer {
             // I'm thinking that we assign each bot a direction based on its ID mod 4
             // or mod 8 for finer detail
             else {
-                System.out.println("spreading out");
-                if (tryMove()
+                if (tryMove(directions[passiveMovementDirection])) {
+                    System.out.println("spreading out");
+                }
+                else {
+                    passiveMovementDirection = 7 - passiveMovementDirection;
+                    if (tryMove(directions[passiveMovementDirection])) {
+                        System.out.println("spreading out");
+                    }
+                }
             }
 
             // sense soup nearby
@@ -544,6 +554,42 @@ public strictfp class RobotPlayer {
         }
     }
 
+    static ArrayList<MapLocation> pathfind(MapLocation target) throws GameActionException {
+        MapLocation currLoc = rc.getLocation();
+        RobotType robotType = rc.getType();
+
+        HashSet<MapLocation> visited = new HashSet<>();
+        PriorityQueue<Triplet> pq = new PriorityQueue<>();
+
+        for (int i = 0; i < 8; i ++) {
+            MapLocation newLoc = currLoc.add(directions[i]);
+
+            if (rc.canSenseLocation(newLoc) && canMoveIfNoUnit(currLoc.directionTo(newLoc))) {
+                ArrayList<MapLocation> path = new ArrayList<>();
+                path.add(newLoc);
+                pq.add(new Triplet(path, newLoc, newLoc.distanceSquaredTo(target) + 1));
+                visited.add(newLoc);
+            }
+        }
+        while (!pq.isEmpty()) {
+            Triplet triplet = pq.remove();
+            MapLocation prevLoc = triplet.getTo();
+            if (prevLoc.equals(target)) return triplet.getPath();
+
+            for (int i = 0; i < 8; i ++) {
+                MapLocation newLoc = prevLoc.add(directions[i]);
+
+                if (!visited.contains(newLoc) && rc.canSenseLocation(newLoc) &&
+                        canMoveIfNoUnit(prevLoc.directionTo(newLoc))) {
+                    ArrayList<MapLocation> path = new ArrayList<>(triplet.getPath());
+                    path.add(newLoc);
+                    pq.add(new Triplet(path, newLoc, newLoc.distanceSquaredTo(target) + path.size()));
+                    visited.add(newLoc);
+                }
+            }
+        }
+        return null;
+    }
     /**
      * Attempts to build a given robot in a given direction.
      *
@@ -585,6 +631,24 @@ public strictfp class RobotPlayer {
             rc.depositSoup(dir, rc.getSoupCarrying());
             return true;
         } else return false;
+    }
+
+    static boolean canMoveIfNoUnit(Direction dir) throws GameActionException {
+        MapLocation selfLoc = rc.getLocation();
+        MapLocation newLoc = selfLoc.add(dir);
+        RobotInfo[] nearbyRobots = rc.senseNearbyRobots();
+        for (RobotInfo r : nearbyRobots) {
+            if (r.location.equals(newLoc) && (r.type == RobotType.HQ ||
+                    Arrays.asList(spawnedByMiner).contains(r.type)))
+                return false;
+        }
+
+        if ((Math.abs(rc.senseElevation(selfLoc) - rc.senseElevation(newLoc)) <= 3 ||
+                rc.getType() == RobotType.DELIVERY_DRONE) && (rc.getType() == RobotType.DELIVERY_DRONE ||
+                rc.getType() == RobotType.LANDSCAPER || rc.getType() == RobotType.MINER) && rc.isReady() &&
+                newLoc.x >= 0 && newLoc.x <= rc.getMapWidth() && newLoc.y >= 0 && newLoc.y <= rc.getMapHeight())
+            return true;
+        return false;
     }
 
 
