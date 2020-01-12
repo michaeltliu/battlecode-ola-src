@@ -198,10 +198,8 @@ public strictfp class RobotPlayer {
                 hasDepositDestination = false;
                 goingToRefinery = true;
                 if (rc.getLocation().distanceSquaredTo(hqLoc) > 2) {
-                    rc.getCooldownTurns();
                     if (tryMove(rc.getLocation().directionTo(hqLoc)))
                         System.out.println("and headed to HQ");
-                    rc.getCooldownTurns();
                 }
                 else {
                     if (tryRefine(rc.getLocation().directionTo(hqLoc))) {
@@ -556,7 +554,9 @@ public strictfp class RobotPlayer {
 
     static ArrayList<MapLocation> pathfind(MapLocation target) throws GameActionException {
         MapLocation currLoc = rc.getLocation();
-        RobotType robotType = rc.getType();
+
+        ArrayList<MapLocation> lowestPath;
+        int lowestHeuristic = Integer.MAX_VALUE;
 
         HashSet<MapLocation> visited = new HashSet<>();
         PriorityQueue<Triplet> pq = new PriorityQueue<>();
@@ -575,6 +575,10 @@ public strictfp class RobotPlayer {
             Triplet triplet = pq.remove();
             MapLocation prevLoc = triplet.getTo();
             if (prevLoc.equals(target)) return triplet.getPath();
+            else if (triplet.getHeuristic() < lowestHeuristic) {
+                lowestHeuristic = triplet.getHeuristic();
+                lowestPath = triplet.getPath();
+            }
 
             for (int i = 0; i < 8; i ++) {
                 MapLocation newLoc = prevLoc.add(directions[i]);
@@ -588,7 +592,7 @@ public strictfp class RobotPlayer {
                 }
             }
         }
-        return null;
+        return lowestPath;
     }
     /**
      * Attempts to build a given robot in a given direction.
