@@ -28,6 +28,10 @@ public strictfp class RobotPlayer {
             RobotType.FULFILLMENT_CENTER, RobotType.NET_GUN};
 
     static int turnCount;
+
+    static boolean hasPathfind;
+    static ArrayList<MapLocation> path;
+    static int pathIndex;
     /**
      * run() is the method that is called when a robot is instantiated in the Battlecode world.
      * If this method returns, the robot dies!
@@ -40,6 +44,10 @@ public strictfp class RobotPlayer {
         RobotPlayer.rc = rc;
 
         turnCount = 0;
+
+        hasPathfind = false;
+        path = null;
+        pathIndex = 0;
 
         System.out.println("I'm a " + rc.getType() + " and I just got created!");
         // Try/catch blocks stop unhandled exceptions, which cause your robot to explode
@@ -198,10 +206,13 @@ public strictfp class RobotPlayer {
                 hasDepositDestination = false;
                 goingToRefinery = true;
                 if (rc.getLocation().distanceSquaredTo(hqLoc) > 2) {
-                    if (tryMove(rc.getLocation().directionTo(hqLoc)))
-                        System.out.println("and headed to HQ");
+                    System.out.println("Going to fullAStar()");
+                    fullAStar(hqLoc);
                 }
                 else {
+                    System.out.println("Reached HQ");
+                    hasPathfind = false;
+                    pathIndex = 0;
                     if (tryRefine(rc.getLocation().directionTo(hqLoc))) {
                         goingToRefinery = false;
                         System.out.println("and refined!");
@@ -235,10 +246,16 @@ public strictfp class RobotPlayer {
                                 hasDepositDestination = true;
                             }
 
-                            if (!goingToRefinery && rc.getLocation().distanceSquaredTo(deposit) > 2)
-                                tryMove(rc.getLocation().directionTo(deposit));
-                            else
+                            if (!goingToRefinery && rc.getLocation().distanceSquaredTo(deposit) > 2) {
+                                System.out.println("Going to fullAStar()");
+                                fullAStar(deposit);
+                            }
+                            else {
+                                System.out.println("Reached deposit");
+                                hasPathfind = false;
+                                pathIndex = 0;
                                 tryMine(rc.getLocation().directionTo(deposit));
+                            }
                         }
                         else if (message[1] == 2) {
                             System.out.println("Notified of new refinery");
@@ -273,11 +290,12 @@ public strictfp class RobotPlayer {
                 MapLocation selfLoc = rc.getLocation();
                 Direction toDeposit = selfLoc.directionTo(deposit);
                 if (selfLoc.distanceSquaredTo(deposit) > 2) {
-                    if (tryMove(toDeposit)) {
-                        System.out.println("Moved to deposit!");
-                    }
+                    System.out.println("Going to fullAStar()");
+                    fullAStar(deposit);
                 }
                 else {
+                    hasPathfind = false;
+                    pathIndex = 0;
                     if (tryMine(toDeposit)) {
                         System.out.println("Mined deposit!");
                     }
@@ -381,7 +399,6 @@ public strictfp class RobotPlayer {
                 closestLoc = loc;
             }
         }
-        if (closestLoc != null) System.out.println("Closest location: " + closestLoc.toString());
         return closestLoc;
     }
 
@@ -522,7 +539,7 @@ public strictfp class RobotPlayer {
      */
     static boolean tryMove(Direction dir) throws GameActionException {
         // System.out.println("I am trying to move " + dir + "; " + rc.isReady() + " " + rc.getCooldownTurns() + " " + rc.canMove(dir));
-        if (dir == null || !rc.isReady()) return false;
+        /*if (dir == null || !rc.isReady()) return false;
         if (rc.canMove(dir)) {
             rc.move(dir);
             return true;
@@ -549,13 +566,38 @@ public strictfp class RobotPlayer {
                 }
             }
             return false;
+        }*/
+        if (rc.isReady() && rc.canMove(dir)) {
+            rc.move(dir);
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
+    static void fullAStar(MapLocation target) throws GameActionException {
+        if (!hasPathfind || (path != null && pathIndex >= path.size())) {
+            System.out.println("pathfinding");
+            path = pathfind(target);
+            hasPathfind = true;
+            pathIndex = 0;
+        }
+        else if (path != null && tryMove(rc.getLocation().directionTo(path.get(pathIndex)))) {
+            pathIndex++;
+            System.out.println("moved towards target");
+        }
+        else {
+            hasPathfind = false;
+            pathIndex = 0;
+            fullAStar(target);
         }
     }
 
     static ArrayList<MapLocation> pathfind(MapLocation target) throws GameActionException {
         MapLocation currLoc = rc.getLocation();
 
-        ArrayList<MapLocation> lowestPath;
+        ArrayList<MapLocation> lowestPath = null;
         int lowestHeuristic = Integer.MAX_VALUE;
 
         HashSet<MapLocation> visited = new HashSet<>();
@@ -642,15 +684,14 @@ public strictfp class RobotPlayer {
         MapLocation newLoc = selfLoc.add(dir);
         RobotInfo[] nearbyRobots = rc.senseNearbyRobots();
         for (RobotInfo r : nearbyRobots) {
-            if (r.location.equals(newLoc) && (r.type == RobotType.HQ ||
-                    Arrays.asList(spawnedByMiner).contains(r.type)))
+            if (r.location.equals(newLoc))
                 return false;
         }
 
-        if ((Math.abs(rc.senseElevation(selfLoc) - rc.senseElevation(newLoc)) <= 3 ||
+        if (newLoc.x >= 0 && newLoc.x <= rc.getMapWidth() && newLoc.y >= 0 && newLoc.y <= rc.getMapHeight() &&
+                (Math.abs(rc.senseElevation(selfLoc) - rc.senseElevation(newLoc)) <= 3 ||
                 rc.getType() == RobotType.DELIVERY_DRONE) && (rc.getType() == RobotType.DELIVERY_DRONE ||
-                rc.getType() == RobotType.LANDSCAPER || rc.getType() == RobotType.MINER) && rc.isReady() &&
-                newLoc.x >= 0 && newLoc.x <= rc.getMapWidth() && newLoc.y >= 0 && newLoc.y <= rc.getMapHeight())
+                rc.getType() == RobotType.LANDSCAPER || rc.getType() == RobotType.MINER) && rc.isReady())
             return true;
         return false;
     }
